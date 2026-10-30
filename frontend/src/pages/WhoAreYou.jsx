@@ -10,6 +10,15 @@ import { useLoad } from "../hooks";
 
 const waitingOf = (p) => p.badges.handovers + p.badges.missed;
 
+// One colour per team: accents only (top bar, chip), so the chart stays calm.
+const TEAM = {
+  Leadership: { bar: "from-slate-600 to-slate-800", chip: "bg-slate-100 text-slate-600" },
+  "Billing Platform": { bar: "from-indigo-500 to-violet-500", chip: "bg-indigo-50 text-indigo-700" },
+  "Network OSS": { bar: "from-sky-500 to-cyan-500", chip: "bg-sky-50 text-sky-700" },
+  "Product & Design": { bar: "from-fuchsia-500 to-pink-500", chip: "bg-fuchsia-50 text-fuchsia-700" },
+};
+const teamStyle = (team) => TEAM[team] || TEAM.Leadership;
+
 function WaitingDot({ count }) {
   if (!count) return null;
   return (
@@ -31,8 +40,9 @@ function LeaderCard({ person, delay, onPick }) {
   return (
     <motion.button initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
       whileHover={{ y: -3 }} onClick={() => onPick(person)}
-      className={`relative w-56 rounded-2xl border bg-white p-4 text-center shadow-sm transition hover:shadow-md ${waiting
+      className={`elevated relative w-56 rounded-2xl border bg-white p-4 pt-5 text-center transition hover:shadow-lg ${waiting
         ? "border-indigo-300 ring-4 ring-indigo-100" : "border-slate-200 hover:border-indigo-200"}`}>
+      <span className={`absolute inset-x-4 top-0 h-1 rounded-b-full bg-gradient-to-r ${teamStyle(person.team).bar}`} />
       <WaitingDot count={waiting} />
       <div className="flex justify-center"><Avatar name={person.name} size="lg" /></div>
       <p className="mt-3 truncate text-sm font-semibold text-slate-800">{person.name}</p>
@@ -48,7 +58,7 @@ function MemberCard({ person, delay, onPick }) {
   return (
     <motion.button initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay }}
       whileHover={{ x: 3 }} onClick={() => onPick(person)}
-      className={`relative flex w-full items-center gap-3 rounded-xl border bg-white px-3 py-2.5 text-left shadow-sm transition hover:shadow-md ${waiting
+      className={`elevated relative flex w-full items-center gap-3 rounded-xl border bg-white px-3 py-2.5 text-left transition hover:shadow-md ${waiting
         ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200 hover:border-indigo-200"}`}>
       <span className="absolute -left-4 top-1/2 w-4 border-t border-slate-300" />
       <Avatar name={person.name} size="sm" />
@@ -65,7 +75,7 @@ function TeamColumn({ manager, index, onPick }) {
   const delay = 0.2 + index * 0.08;
   return (
     <div className="flex w-60 flex-col items-center">
-      <span className="mb-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <span className={`mb-2 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${teamStyle(manager.team).chip}`}>
         {manager.team} · {manager.reports.length + 1}
       </span>
       <LeaderCard person={manager} delay={delay} onPick={onPick} />
@@ -96,7 +106,8 @@ export default function WhoAreYou() {
   return (
     <div>
       <div className="mb-10 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Who are you?</h1>
+        <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">Northwind Telecom · Engineering</p>
+        <h1 className="mt-2 text-4xl font-bold tracking-tight text-slate-900">Who are you?</h1>
         <p className="mt-2 text-slate-500">
           {intent === "takeover" ? "Pick yourself to see the work being handed to you."
             : intent === "missed" ? "Pick yourself to catch up on the meetings you missed."

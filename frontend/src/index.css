@@ -6,6 +6,33 @@
 
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
+  /* Soft indigo/violet glow at the top + a faint dot grid: depth without being loud. */
+  background-image:
+    radial-gradient(1200px 500px at 15% -10%, rgb(224 231 255 / 0.9), transparent 60%),
+    radial-gradient(900px 420px at 95% -5%, rgb(237 233 254 / 0.8), transparent 60%),
+    radial-gradient(rgb(148 163 184 / 0.18) 1px, transparent 1px);
+  background-size: auto, auto, 22px 22px;
+  background-attachment: fixed;
+}
+
+::selection { @apply bg-indigo-100 text-indigo-900; }
+
+/* Thin, quiet scrollbars. */
+* { scrollbar-width: thin; scrollbar-color: rgb(203 213 225) transparent; }
+
+/* Shimmer for skeleton loaders (nicer than a plain pulse). */
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+.shimmer { @apply relative overflow-hidden; }
+.shimmer::after {
+  content: ""; @apply absolute inset-0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+  animation: shimmer 1.4s infinite;
+}
+
+/* Card elevation used everywhere: hairline border + soft layered shadow. */
+.elevated {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.10);
 }
 
 /* Org chart connectors: classic nested-list tree, lines drawn with pseudo-elements. */

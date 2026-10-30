@@ -21,7 +21,7 @@ def _bool(name: str, default: bool) -> bool:
 class Settings:
     database_url: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'app.db'}")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
     ai_timeout_s: float = float(os.getenv("AI_TIMEOUT_S", "25"))
     ai_max_attempts: int = int(os.getenv("AI_MAX_ATTEMPTS", "2"))
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()

@@ -188,7 +188,11 @@ def _checked(ctx: Context, data: _AIPack) -> dict:
         else:
             drop("doc", r.doc_id)
 
-    return {"mode": ctx.mode, "tldr": data.tldr, "role_gap": data.role_gap.model_dump(),
+    # Role names are facts, so they come from the DB; the AI only writes the gap itself.
+    role_gap = data.role_gap.model_dump()
+    role_gap["from_role"] = (ctx.leaver.role if ctx.leaver else ctx.person.role) or role_gap["from_role"]
+    role_gap["to_role"] = ctx.person.role or role_gap["to_role"]
+    return {"mode": ctx.mode, "tldr": data.tldr, "role_gap": role_gap,
             "key_decisions": key_decisions, "next_actions": actions, "who_to_ask": who,
             "read_these": reads, "risks": data.risks, "warnings": warnings}
 

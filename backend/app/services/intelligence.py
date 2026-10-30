@@ -125,22 +125,60 @@ def build_recap(meeting: Meeting, notes: str, people: list[Person]) -> RecapDraf
 
 _ACTION_RE = re.compile(r"^\s*(?:[-*•]\s*)?(?:action|ai|todo|to-do|task|ap)\s*[:\-]\s*(.+)$", re.I)
 _DECISION_RE = re.compile(r"^\s*(?:[-*•]\s*)?(?:decision|decided|agreed)\s*[:\-]?\s*(.+)$", re.I)
+# Chat/transcript lines: "[09:04] Rahul: text" or "Rahul: text".
+_CHAT_RE = re.compile(r"^\s*(?:\[[^\]]*\]\s*)?([A-Za-z][A-Za-z .'-]{1,40}):\s*(.+)$")
+_CHAT_DECISION_RE = re.compile(r"\b(?:decision|decided|agreed)\b\s*[,:\-]?\s*(.+)", re.I)
+_COMMIT_RE = re.compile(r"\b(?:I'll|I will|I can)\s+(.+)", re.I)
+
+
+def _person_named(name: str, people: list[Person]) -> Person | None:
+    first = name.strip().split(" ")[0].lower()
+    return next((p for p in people if p.name.split()[0].lower() == first), None)
+
+
+def _named_owner(text: str, people: list[Person]) -> Person | None:
+    """'Rahul owns the fix' / 'Vikram to do it' -> that person."""
+    for p in people:
+        first = p.name.split()[0]
+        if re.search(rf"\b{re.escape(first)}\s+(?:owns|to\s)", text, re.I):
+            return p
+    return None
+
+
+def _draft_item(text: str, owner: Person | None, line: str) -> DraftItem:
+    title = text.strip().rstrip(".")
+    title = (title[0].upper() + title[1:])[:300]
+    return DraftItem(title=title, owner_id=owner.id if owner else None, owner_name=owner.name if owner else None,
+                     source_quote=line.strip(), quote_verified=True, warnings=[] if owner else ["No owner detected"])
 
 
 def fallback_recap(notes: str, people: list[Person]) -> RecapDraft:
-    """Deterministic backup used only when the AI is unavailable. Deliberately simple."""
-    decisions, items = [], []
+    """Deterministic backup used only when the AI is unavailable. Deliberately simple keyword rules:
+    'Decision:/Action:' lines, and in chat logs 'decision/agreed' (decision) or 'I'll / I can / X owns' (action)."""
+    decisions, items, messages = [], [], []
     for line in notes.splitlines():
+        if not line.strip():
+            continue
         if m := _DECISION_RE.match(line):
             decisions.append(DraftDecision(text=m.group(1).strip(), source_quote=line.strip(), quote_verified=True))
-        elif m := _ACTION_RE.match(line):
+            continue
+        if m := _ACTION_RE.match(line):
             text = m.group(1).strip()
             owner = next((p for p in people if p.name.split()[0].lower() in text.lower()), None)
-            items.append(DraftItem(title=text[:300], owner_id=owner.id if owner else None,
-                                   owner_name=owner.name if owner else None, source_quote=line.strip(),
-                                   quote_verified=True, warnings=[] if owner else ["No owner detected"]))
-    sentences = re.split(r"(?<=[.!?])\s+", " ".join(notes.split()))
-    summary = " ".join(sentences[:3])[:600] or "No summary available."
+            items.append(_draft_item(text, owner, line))
+            continue
+        chat = _CHAT_RE.match(line)
+        speaker, text = (chat.group(1), chat.group(2)) if chat else (None, line.strip())
+        messages.append(text)
+        if m := _CHAT_DECISION_RE.search(text):
+            decisions.append(DraftDecision(text=m.group(1).strip()[:300], source_quote=line.strip(), quote_verified=True))
+        elif m := _COMMIT_RE.search(text):
+            items.append(_draft_item(m.group(1), _person_named(speaker, people) if speaker else None, line))
+        elif owner := _named_owner(text, people):
+            items.append(_draft_item(text, owner, line))
+    first = " ".join(messages[:3])[:500]
+    summary = (f"Rule-based summary ({len(decisions)} decision(s), {len(items)} action item(s) detected). "
+               f"Discussion started with: {first}") if messages else "No summary available."
     return RecapDraft(summary=summary, decisions=decisions, action_items=items, source="fallback", warnings=[])
 
 

@@ -243,3 +243,17 @@ def test_takeover_pack_fallback_and_readiness(client, monkeypatch):
     assert next(h for h in box["handovers"] if h["meeting"]["id"] == ho["id"])["done"]
     events = {json.loads(l).get("event") for l in (TMP / "test.log").read_text().splitlines() if l.strip()}
     assert {"takeover_pack_generated", "takeover_progress_updated"} <= events
+
+
+def test_fallback_recap_reads_chat_logs():
+    from types import SimpleNamespace
+
+    from app.services.intelligence import fallback_recap
+
+    people = [SimpleNamespace(id=1, name="Rahul Mehta"), SimpleNamespace(id=2, name="Ananya Rao")]
+    notes = ("[09:07] Rahul: I can add a dedupe table keyed on activation_id by Monday\n"
+             "[09:10] Ananya: decision - we auto-refund the duplicate charge this time\n"
+             "[09:11] Ananya: ok thanks all")
+    draft = fallback_recap(notes, people)
+    assert [d.text for d in draft.decisions] == ["we auto-refund the duplicate charge this time"]
+    assert len(draft.action_items) == 1 and draft.action_items[0].owner_id == 1  # owner = the speaker

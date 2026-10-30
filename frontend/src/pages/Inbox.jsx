@@ -80,7 +80,7 @@ function GivenCard({ g }) {
 
 function Stat({ label, value, tone }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+    <div className="elevated rounded-2xl border border-slate-200/70 bg-white/90 px-5 py-4">
       <p className={`text-2xl font-bold ${tone}`}>{value}</p>
       <p className="text-xs font-medium text-slate-500">{label}</p>
     </div>
@@ -102,9 +102,10 @@ export default function Inbox() {
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <div className="flex items-center gap-4">
-        <Avatar name={person.name} size="lg" />
+        <div className="rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 p-0.5"><Avatar name={person.name} size="lg" /></div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Hi {firstName(person.name)}</h1>
+          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">Your inbox</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Hi {firstName(person.name)} 👋</h1>
           <p className="text-slate-500">{person.role} · {person.team}</p>
         </div>
       </div>

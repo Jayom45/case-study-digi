@@ -187,6 +187,7 @@ skeleton loaders, toast for errors (show `request_id` from the error JSON). Vite
 - Validation in Pydantic schemas; domain errors via `errors.py` classes (never bare 500s).
 - Keep files small and readable. Prefer clarity over cleverness. I must be able to explain it.
 - Don't touch `.env`; config comes from env vars (see `.env.example`).
+- After every change that adds or modifies a feature, endpoint, screen, table or design decision, update README.md and UNDERSTANDING.md in the same step so they always match the code. Mention which sections you updated.
 
 ## 5. Run locally
 ```bash
