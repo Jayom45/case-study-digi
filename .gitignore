@@ -1,0 +1,8 @@
+tests/.tmp/
+data/
+logs/
+__pycache__/
+.env
+node_modules/
+frontend/dist/
+.pytest_cache/

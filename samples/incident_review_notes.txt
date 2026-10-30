@@ -1,0 +1,18 @@
+[09:02] Ananya: ok let's start, Vikram can't join (on call handoff), we'll send him notes
+[09:03] Sneha: support got ~340 tickets since Tue, prepaid users charged twice for the 5GB SMS+data bundle
+[09:04] Rahul: looked at logs. the bundle activation consumer re-processes the message when the ack times out after 30s. no dedupe on activation_id
+[09:05] Karan: we never tested consumer redelivery, not in the regression checklist
+[09:06] Ananya: so same pattern as INC-142 basically, retry without idempotency
+[09:07] Rahul: yes. I can add a dedupe table keyed on activation_id, should be done by Monday
+[09:08] Ananya: ok Rahul owns the dedupe fix, Monday
+[09:09] Sneha: what about the customers? we need refunds asap, people are angry on twitter
+[09:10] Ananya: decision - we auto-refund the duplicate charge this time, it's prepaid balance so it's simple. no need to wait for support
+[09:11] Sneha: I'll get the list of affected msisdns from Rahul's query and send the refund batch + SMS apology by Thursday
+[09:12] Karan: I'll add consumer redelivery + ack timeout cases to the regression checklist and write the tests, end of next week
+[09:13] Rahul: also we should raise the ack timeout to 120s, Vikram needs to change the broker config
+[09:14] Ananya: agreed, raise to 120s. Vikram to do it when he's back, can someone tell him
+[09:15] Karan: are we sure the postpaid side isn't affected too?
+[09:16] Rahul: not sure, need to check
+[09:16] Ananya: open question then. let's also do a proper postmortem doc, I'll write it by Friday
+[09:18] Sneha: also pls nobody mention the incident number in customer comms, guidelines say so
+[09:19] Ananya: ok thanks all
