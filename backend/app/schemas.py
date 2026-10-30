@@ -25,7 +25,10 @@ class PersonIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=200, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     role: str | None = Field(default=None, max_length=120)
-    _s = field_validator("name", "email", "role", mode="before")(_strip)
+    level: int = Field(default=3, ge=1, le=10)
+    team: str | None = Field(default=None, max_length=120)
+    reports_to_id: int | None = None
+    _s = field_validator("name", "email", "role", "team", mode="before")(_strip)
 
 
 class PersonOut(ORM):
@@ -33,6 +36,9 @@ class PersonOut(ORM):
     name: str
     email: str
     role: str | None
+    level: int | None = None
+    team: str | None = None
+    reports_to_id: int | None = None
 
 
 # ---------- Meetings ----------
@@ -238,3 +244,12 @@ class RecapApply(BaseModel):
 
 class BriefRequest(BaseModel):
     person_id: int
+
+
+# ---------- Takeover pack ----------
+class TakeoverRequest(BaseModel):
+    person_id: int
+
+
+class ProgressUpdate(BaseModel):
+    checked: list[str] = Field(max_length=100, description="checklist keys ticked, e.g. 'action:0', 'decision:7', 'doc:3'")

@@ -30,6 +30,10 @@ class Person(Base):
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(200), unique=True)
     role: Mapped[str | None] = mapped_column(String(120))
+    # Org hierarchy: level 1 = top of the tree. Used for the org chart and the "role gap" in takeover packs.
+    level: Mapped[int] = mapped_column(Integer, default=3)
+    team: Mapped[str | None] = mapped_column(String(120))
+    reports_to_id: Mapped[int | None] = mapped_column(ForeignKey("people.id"))
 
 
 class Meeting(Base):
@@ -155,12 +159,18 @@ class ItemKBLink(Base):
 
 
 class Brief(Base):
+    """A catch-up brief (kind='brief') or a role-aware Takeover Pack (kind='takeover')."""
+
     __tablename__ = "briefs"
     id: Mapped[int] = mapped_column(primary_key=True)
     meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
     person_id: Mapped[int | None] = mapped_column(ForeignKey("people.id"))
+    kind: Mapped[str] = mapped_column(String(20), default="brief")  # brief | takeover
     content: Mapped[dict] = mapped_column(JSON)
     source: Mapped[str] = mapped_column(String(20))  # ai | fallback
+    # Takeover readiness: checklist keys the person has ticked ("action:0", "decision:7", "doc:3").
+    # Stored on the pack itself, so a regenerated pack starts with a fresh checklist.
+    checked: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     meeting: Mapped[Meeting] = relationship(back_populates="briefs")
     person: Mapped[Person | None] = relationship()

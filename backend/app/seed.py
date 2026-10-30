@@ -13,14 +13,16 @@ from .services import workflow as wf
 log = get_logger("app.seed")
 SAMPLES = Path(__file__).resolve().parent.parent.parent / "samples"
 
+# (name, email, role, level, team, reports_to first name). Level 1 = top of the org chart.
 PEOPLE = [
-    ("Ananya Rao", "ananya.rao@northwind-tel.com", "Engineering Manager"),
-    ("Rahul Mehta", "rahul.mehta@northwind-tel.com", "Backend Engineer"),
-    ("Priya Nair", "priya.nair@northwind-tel.com", "Frontend Engineer"),
-    ("Karan Shah", "karan.shah@northwind-tel.com", "QA Lead"),
-    ("Sneha Iyer", "sneha.iyer@northwind-tel.com", "Product Manager"),
-    ("Vikram Joshi", "vikram.joshi@northwind-tel.com", "DevOps Engineer"),
-    ("Arjun Desai", "arjun.desai@northwind-tel.com", "Frontend Engineer"),
+    ("Meera Kapoor", "meera.kapoor@northwind-tel.com", "Head of Engineering", 1, "Leadership", None),
+    ("Ananya Rao", "ananya.rao@northwind-tel.com", "Engineering Manager", 2, "Billing Platform", "Meera"),
+    ("Sneha Iyer", "sneha.iyer@northwind-tel.com", "Product Manager", 2, "Product", "Meera"),
+    ("Rahul Mehta", "rahul.mehta@northwind-tel.com", "Backend Engineer", 3, "Billing Platform", "Ananya"),
+    ("Priya Nair", "priya.nair@northwind-tel.com", "Frontend Engineer", 3, "Billing Platform", "Ananya"),
+    ("Arjun Desai", "arjun.desai@northwind-tel.com", "Frontend Engineer", 3, "Billing Platform", "Ananya"),
+    ("Karan Shah", "karan.shah@northwind-tel.com", "QA Lead", 3, "Billing Platform", "Ananya"),
+    ("Vikram Joshi", "vikram.joshi@northwind-tel.com", "DevOps Engineer", 3, "Billing Platform", "Ananya"),
 ]
 
 KB = [
@@ -48,6 +50,13 @@ Dependencies: finance sign-off on proration rules; customer portal invoice previ
     ("QA Regression Checklist", """Before any billing release QA runs: proration scenarios (upgrade, downgrade, mid-cycle,
 cycle boundary), duplicate submission / idempotency, payment gateway retries and timeouts, invoice PDF rendering,
 tax rounding for GST. Flaky tests must be fixed or quarantined with an owner; no release with red regression suite."""),
+    ("Engineering Manager Playbook", """What the Billing Platform Engineering Manager does every week.
+1. Runs the Billing Platform Weekly Sync: walks carried items first, chases anything carried 2+ times.
+2. Approves releases: signs the go-live readiness checklist (QA sign-off + finance sign-off + rollback tested).
+3. Finance follow-ups: sends a weekly migration status note to Finance and the Head of Engineering every Friday.
+4. Escalations: Sev-1/Sev-2 incidents go to the Head of Engineering within 1 hour.
+5. People: approves leave and the on-call rota; owns handovers when someone is away.
+Engineers do NOT need to: write code reviews for every PR, attend the monthly budget review (Head of Engineering does)."""),
     ("Customer Communication Guidelines", """Any customer-facing billing message needs Product + Support review.
 Correction emails: apologise once, state the corrected amount, explain refund timeline (5-7 working days),
 link to support. Send within 72h of the fix being confirmed. Never mention internal incident numbers."""),
@@ -63,9 +72,13 @@ def seed_if_empty(db: Session) -> None:
         return
     today = date.today()
     p = {}
-    for name, email, role in PEOPLE:
-        p[name.split()[0]] = Person(name=name, email=email, role=role)
+    for name, email, role, level, team, _ in PEOPLE:
+        p[name.split()[0]] = Person(name=name, email=email, role=role, level=level, team=team)
     db.add_all(p.values())
+    db.flush()
+    for name, *_, manager in PEOPLE:
+        if manager:
+            p[name.split()[0]].reports_to_id = p[manager].id
     docs = {title: KBDoc(title=title, content=content, doc_type="document") for title, content in KB}
     db.add_all(docs.values())
     db.flush()
@@ -153,6 +166,11 @@ def seed_if_empty(db: Session) -> None:
     j = item(w3, "Add analytics events to invoice preview", "Priya", 7)
     k = item(w3, "Rotate expiring payment gateway API credentials", "Vikram", 2)
     wf.update_item(db, k, {"status": "blocked"}, note="Waiting for new credentials from the gateway provider")
+    # Manager-only work: this is what makes the Ananya -> Rahul role gap visible in the takeover pack.
+    m1 = item(w3, "Approve go-live readiness checklist for Billing API v2", "Ananya", 5,
+              description="Needs QA regression sign-off and finance sign-off on proration before approval.")
+    m2 = item(w3, "Send weekly migration status note to Finance and Meera", "Ananya", 1)
+    m3 = item(w3, "Chase INC-142 fix in Week 4 sync; escalate to Meera if it slips again", "Ananya", 4)
     stamp(_at(w3d))
 
     # ---- Handover: Priya -> Arjun ----
@@ -171,6 +189,24 @@ def seed_if_empty(db: Session) -> None:
     ho.decisions = [Decision(text="Arjun owns all customer portal billing work until Priya returns on Nov 17")]
     wf.apply_handover(db, ho)
     stamp(_at(hd, 15))
+
+    # ---- Handover: Ananya -> Rahul (acting manager). A role-gap handover: engineer stepping up. ----
+    ho2 = Meeting(title="Handover: Ananya -> Rahul (acting manager, Nov 3-14)", kind="handover", status="held",
+                  scheduled_at=_at(hd, 17), series=None, handover_from=p["Ananya"], handover_to=p["Rahul"],
+                  agenda="Hand over the manager duties: weekly sync, approvals, finance follow-ups, escalations.",
+                  summary="Ananya is on leave Nov 3-14 and Rahul acts as Engineering Manager. He runs the Week 4 sync, "
+                          "approves the go-live readiness checklist once QA and finance sign off, and sends the Friday "
+                          "status note to Finance and Meera. Sev-1/Sev-2 escalations go straight to Meera.",
+                  recap_source="manual")
+    db.add(ho2)
+    db.flush()
+    ho2.participants = [Participant(person_id=p["Ananya"].id, attendance="attended"),
+                        Participant(person_id=p["Rahul"].id, attendance="attended"),
+                        Participant(person_id=p["Meera"].id, attendance="invited")]
+    ho2.decisions = [Decision(text="Rahul is acting Engineering Manager from Nov 3 to Nov 14"),
+                     Decision(text="Go-live checklist approval stays with the acting manager; Meera only for escalations")]
+    wf.apply_handover(db, ho2)
+    stamp(_at(hd, 17))
 
     # ---- Week 4 (upcoming) ----
     w4d = today + timedelta(days=4)
@@ -199,6 +235,9 @@ def seed_if_empty(db: Session) -> None:
         (f, "Billing API v2 Specification", "Preview endpoint that powers this screen"),
         (k, "Deployment Runbook", "Credential storage in Vault and the 90-day rotation rule"),
         (h, "Q4 Roadmap: Billing Platform Migration", "Finance sign-off is a go-live dependency"),
+        (m1, "Engineering Manager Playbook", "Defines what the go-live readiness checklist needs"),
+        (m2, "Engineering Manager Playbook", "Weekly Friday status note to Finance and Head of Engineering"),
+        (m3, "Postmortem INC-142: Duplicate invoices on plan change", "Background on the fix being chased"),
     ]:
         db.add(ItemKBLink(item_id=it.id, doc_id=docs[title].id, reason=reason, confidence=0.9, source="manual"))
 
@@ -207,7 +246,7 @@ def seed_if_empty(db: Session) -> None:
                      content=m.summary + "\n\nDecisions:\n" + "\n".join(f"- {x.text}" for x in m.decisions)))
     for it in (a, b, c, d, e, f, g):
         it.created_at = it.origin_meeting.scheduled_at
-    for it in (h, i, j, k):
+    for it in (h, i, j, k, m1, m2, m3):
         it.created_at = _at(w3d)
     db.commit()
     log.info("Seed data created", extra={"event": "seed_created", "people": len(PEOPLE), "kb_docs": len(KB)})

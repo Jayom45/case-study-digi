@@ -154,3 +154,88 @@ def test_logs_are_json_with_request_ids_and_no_secrets(client):
 def test_unknown_ids_return_404(client):
     r = client.get("/api/items/99999")
     assert r.status_code == 404 and r.json()["error"]["code"] == "not_found"
+
+
+# ---------- Role-aware takeover ----------
+def person(client, first):
+    return next(p for p in client.get("/api/people").json() if p["name"].startswith(first))
+
+
+def ananya_to_rahul(client):
+    return next(m for m in client.get("/api/meetings?kind=handover").json() if "Ananya -> Rahul" in m["title"])
+
+
+def test_org_tree_and_badges(client):
+    roots = client.get("/api/org").json()["roots"]
+    assert [r["name"] for r in roots] == ["Meera Kapoor"]
+    ananya = next(r for r in roots[0]["reports"] if r["name"] == "Ananya Rao")
+    rahul = next(r for r in ananya["reports"] if r["name"] == "Rahul Mehta")
+    assert rahul["badges"]["handovers"] >= 1  # Ananya -> Rahul handover waiting
+    assert ananya["badges"]["missed"] >= 1  # she was absent from the Priya -> Arjun handover
+
+
+def test_inbox_lists_handovers_and_missed_meetings(client):
+    rahul = person(client, "Rahul")
+    box = client.get(f"/api/people/{rahul['id']}/inbox").json()
+    assert any(h["from_person"]["name"] == "Ananya Rao" and h["open_items"] >= 3 for h in box["handovers"])
+    assert any(m["meeting"]["title"] == "Billing Sync - Week 3" for m in box["missed"])
+    assert client.get("/api/people/99999/inbox").status_code == 404
+
+
+def test_takeover_pack_ai_ids_are_checked(client, monkeypatch):
+    rahul, ho = person(client, "Rahul"), ananya_to_rahul(client)
+    detail = client.get(f"/api/meetings/{ho['id']}").json()
+    item_id, decision_id = detail["items"][0]["id"], detail["decisions"][0]["id"]
+    monkeypatch.setattr(ai, "transport", fake_model({
+        "tldr": ["You are acting EM for two weeks."],
+        "role_gap": {"from_role": "Engineering Manager", "to_role": "Backend Engineer",
+                     "new_for_you": ["Approve the go-live checklist"], "can_ignore": ["Budget review"]},
+        "key_decisions": [{"decision_id": decision_id, "why": "Defines your authority"},
+                          {"decision_id": 99999, "why": "invented"}],
+        "next_actions": [{"text": "Run the Week 4 sync", "item_id": item_id, "why": "Due soon"},
+                         {"text": "Do something invented", "item_id": 99999, "why": "?"}],
+        "who_to_ask": [{"person_id": person(client, "Meera")["id"], "about": "Escalations"},
+                       {"person_id": 99999, "about": "ghost"}],
+        "read_these": [{"doc_id": 99999, "why": "ghost doc"}],
+        "risks": ["INC-142 slipped 3 times"]}))
+    r = client.post(f"/api/meetings/{ho['id']}/takeover-pack", json={"person_id": rahul["id"]})
+    assert r.status_code == 201
+    pack = r.json()
+    c = pack["content"]
+    assert pack["source"] == "ai" and c["mode"] == "handover"
+    assert [d["decision_id"] for d in c["key_decisions"]] == [decision_id]
+    assert c["key_decisions"][0]["meeting_id"] == ho["id"]  # traceable to its source meeting
+    assert c["next_actions"][1]["item_id"] is None and c["read_these"] == []
+    assert [w["name"] for w in c["who_to_ask"]] == ["Meera Kapoor"]
+    assert len(c["warnings"]) == 4
+    assert pack["timeline"] and sum(len(v) for v in pack["workflow"].values()) >= 3
+    got = client.get(f"/api/meetings/{ho['id']}/takeover-pack?person_id={rahul['id']}").json()
+    assert got["id"] == pack["id"]
+
+
+def test_takeover_pack_fallback_and_readiness(client, monkeypatch):
+    def down(system, prompt):
+        import httpx
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(ai, "transport", down)
+    rahul, ho = person(client, "Rahul"), ananya_to_rahul(client)
+    pack = client.post(f"/api/meetings/{ho['id']}/takeover-pack", json={"person_id": rahul["id"]}).json()
+    c = pack["content"]
+    assert pack["source"] == "fallback" and c["warnings"] and c["next_actions"][0]["item_id"]
+    assert "more senior role" in c["role_gap"]["new_for_you"][0]
+    assert pack["progress"]["readiness"] == 0
+
+    url = f"/api/takeover-packs/{pack['id']}/progress"
+    assert client.patch(url, json={"checked": ["action:999"]}).status_code == 422
+    first = client.patch(url, json={"checked": ["action:0"]}).json()
+    assert 0 < first["readiness"] < 100
+    keys = ([f"action:{n}" for n in range(len(c["next_actions"]))]
+            + [f"decision:{d['decision_id']}" for d in c["key_decisions"]]
+            + [f"doc:{d['doc_id']}" for d in c["read_these"]])
+    assert client.patch(url, json={"checked": keys}).json()["readiness"] == 100
+    # Fully ready -> no longer waiting in the inbox.
+    box = client.get(f"/api/people/{rahul['id']}/inbox").json()
+    assert next(h for h in box["handovers"] if h["meeting"]["id"] == ho["id"])["done"]
+    events = {json.loads(l).get("event") for l in (TMP / "test.log").read_text().splitlines() if l.strip()}
+    assert {"takeover_pack_generated", "takeover_progress_updated"} <= events

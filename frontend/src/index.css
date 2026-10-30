@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* Org chart connectors: classic nested-list tree, lines drawn with pseudo-elements. */
+.tree ul { @apply relative flex justify-center pt-6; }
+.tree li { @apply relative flex flex-col items-center px-2 pt-6; }
+.tree li::before, .tree li::after {
+  content: ""; @apply absolute top-0 h-6 w-1/2 border-t border-slate-300;
+}
+.tree li::before { @apply right-1/2; }
+.tree li::after { @apply left-1/2 border-l; }
+.tree li:only-child::before, .tree li:only-child::after { @apply hidden; }
+.tree li:only-child { @apply pt-0; }
+.tree li:first-child::before, .tree li:last-child::after { @apply border-t-0; }
+.tree li:last-child::before { @apply rounded-tr-lg border-r; }
+.tree li:first-child::after { @apply rounded-tl-lg; }
+.tree ul ul::before {
+  content: ""; @apply absolute left-1/2 top-0 h-6 border-l border-slate-300;
+}
+.tree > ul { @apply pt-0; }

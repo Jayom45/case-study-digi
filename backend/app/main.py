@@ -12,7 +12,7 @@ from .config import settings
 from .db import Base, SessionLocal, engine
 from .errors import AppError
 from .logging_setup import get_logger, request_id_var, setup_logging
-from .routers import items, meetings, misc
+from .routers import items, meetings, misc, takeover
 
 setup_logging(settings.log_level, settings.log_file)
 log = get_logger("app")
@@ -82,6 +82,7 @@ async def validation_handler(request: Request, exc: RequestValidationError):
 app.include_router(meetings.router)
 app.include_router(items.router)
 app.include_router(misc.router)
+app.include_router(takeover.router)
 
 # Serve the built React app (single deployable unit).
 DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"

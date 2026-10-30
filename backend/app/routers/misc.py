@@ -31,6 +31,8 @@ def list_people(db: Session = Depends(get_db)):
 
 @router.post("/people", response_model=PersonOut, status_code=201)
 def create_person(body: PersonIn, db: Session = Depends(get_db)):
+    if body.reports_to_id is not None:
+        wf.get_or_404(db, Person, body.reports_to_id, "Manager")
     person = Person(**body.model_dump())
     db.add(person)
     try:

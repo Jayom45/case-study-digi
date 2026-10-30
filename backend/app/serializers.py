@@ -51,7 +51,7 @@ def meeting_detail(db: Session, m: Meeting) -> MeetingDetailOut:
         handover_from=m.handover_from, handover_to=m.handover_to,
         participants=m.participants, decisions=m.decisions,
         items=[item_out(l.item, l.relation) for l in links],
-        briefs=[brief_out(b) for b in sorted(m.briefs, key=lambda b: b.id, reverse=True)],
+        briefs=[brief_out(b) for b in sorted(m.briefs, key=lambda b: b.id, reverse=True) if b.kind == "brief"],
         needs_brief=[PersonOut.model_validate(p) for p in needs],
         next_meeting_id=nxt,
     )
