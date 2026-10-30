@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..errors import InvalidState, NotFound
 from ..logging_setup import get_logger
-from ..models import Brief, Meeting, Person
+from ..models import OPEN_STATUSES, ActionItem, Brief, Meeting, Person
 from ..schemas import PersonOut, ProgressUpdate, TakeoverRequest
-from ..serializers import meeting_summary
+from ..serializers import item_out, meeting_summary
 from ..services import takeover as tk
 from ..services import workflow as wf
 
@@ -41,9 +41,17 @@ def inbox(person_id: int, db: Session = Depends(get_db)):
     for e in entries:
         e["meeting"] = meeting_summary(e["meeting"])
         e["from_person"] = PersonOut.model_validate(e["from_person"]) if e["from_person"] else None
+    given = tk.handed_over_by(db, person)
+    for g in given:
+        g["meeting"] = meeting_summary(g["meeting"])
+        g["to_person"] = PersonOut.model_validate(g["to_person"])
+    mine = db.scalars(select(ActionItem).where(ActionItem.owner_id == person.id, ActionItem.status.in_(OPEN_STATUSES))
+                      .order_by(ActionItem.due_date)).all()
     return {"person": PersonOut.model_validate(person),
             "handovers": [e for e in entries if e["reason"] == "handover"],
-            "missed": [e for e in entries if e["reason"] == "missed"]}
+            "missed": [e for e in entries if e["reason"] == "missed"],
+            "handed_over": given,
+            "my_items": [item_out(i) for i in mine]}
 
 
 # ---------- Takeover pack ----------
@@ -52,6 +60,8 @@ def _pack_out(db: Session, pack: Brief) -> dict:
     meeting, person = pack.meeting, pack.person
     ctx = tk.Context(db, meeting, person)
     return {"id": pack.id, "meeting_id": meeting.id, "meeting_title": meeting.title,
+            "meeting_date": meeting.scheduled_at,
+            "from_person": PersonOut.model_validate(meeting.handover_from) if meeting.handover_from else None,
             "person": PersonOut.model_validate(person), "source": pack.source, "created_at": pack.created_at,
             "content": pack.content,
             "progress": {"checked": pack.checked or [], "readiness": tk.readiness(pack),

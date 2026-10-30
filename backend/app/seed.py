@@ -17,12 +17,20 @@ SAMPLES = Path(__file__).resolve().parent.parent.parent / "samples"
 PEOPLE = [
     ("Meera Kapoor", "meera.kapoor@northwind-tel.com", "Head of Engineering", 1, "Leadership", None),
     ("Ananya Rao", "ananya.rao@northwind-tel.com", "Engineering Manager", 2, "Billing Platform", "Meera"),
-    ("Sneha Iyer", "sneha.iyer@northwind-tel.com", "Product Manager", 2, "Product", "Meera"),
+    ("Farhan Qureshi", "farhan.qureshi@northwind-tel.com", "Engineering Manager", 2, "Network OSS", "Meera"),
+    ("Sneha Iyer", "sneha.iyer@northwind-tel.com", "Group Product Manager", 2, "Product & Design", "Meera"),
     ("Rahul Mehta", "rahul.mehta@northwind-tel.com", "Backend Engineer", 3, "Billing Platform", "Ananya"),
     ("Priya Nair", "priya.nair@northwind-tel.com", "Frontend Engineer", 3, "Billing Platform", "Ananya"),
     ("Arjun Desai", "arjun.desai@northwind-tel.com", "Frontend Engineer", 3, "Billing Platform", "Ananya"),
     ("Karan Shah", "karan.shah@northwind-tel.com", "QA Lead", 3, "Billing Platform", "Ananya"),
     ("Vikram Joshi", "vikram.joshi@northwind-tel.com", "DevOps Engineer", 3, "Billing Platform", "Ananya"),
+    ("Neha Kulkarni", "neha.kulkarni@northwind-tel.com", "Backend Engineer", 3, "Network OSS", "Farhan"),
+    ("Aditya Menon", "aditya.menon@northwind-tel.com", "Data Engineer", 3, "Network OSS", "Farhan"),
+    ("Ishaan Verma", "ishaan.verma@northwind-tel.com", "Site Reliability Engineer", 3, "Network OSS", "Farhan"),
+    ("Pooja Reddy", "pooja.reddy@northwind-tel.com", "QA Engineer", 3, "Network OSS", "Farhan"),
+    ("Kavya Pillai", "kavya.pillai@northwind-tel.com", "Product Designer", 3, "Product & Design", "Sneha"),
+    ("Rohan Bhatia", "rohan.bhatia@northwind-tel.com", "Business Analyst", 3, "Product & Design", "Sneha"),
+    ("Zoya Khan", "zoya.khan@northwind-tel.com", "Customer Support Lead", 3, "Product & Design", "Sneha"),
 ]
 
 KB = [
@@ -57,6 +65,12 @@ tax rounding for GST. Flaky tests must be fixed or quarantined with an owner; no
 4. Escalations: Sev-1/Sev-2 incidents go to the Head of Engineering within 1 hour.
 5. People: approves leave and the on-call rota; owns handovers when someone is away.
 Engineers do NOT need to: write code reviews for every PR, attend the monthly budget review (Head of Engineering does)."""),
+    ("Network Alarm Runbook", """How the Network OSS team handles alarms from cell-site controllers and core nodes.
+1. Alarms are ingested by the fault manager; duplicates (same node + alarm code within 5 min) are suppressed at ingestion.
+2. Sev-1 (site down, >1,000 subscribers) pages the SRE on-call via PagerDuty immediately; Sev-2 within 15 minutes.
+3. On-call hands over every Monday 10:00 IST with a written list of open incidents.
+4. Inventory sync must stay under 15 minutes lag (p95); breaches page the data on-call.
+5. Vendor firmware updates are rolled out to 5% of sites first and watched for alarm spikes for 48h."""),
     ("Customer Communication Guidelines", """Any customer-facing billing message needs Product + Support review.
 Correction emails: apologise once, state the corrected amount, explain refund timeline (5-7 working days),
 link to support. Send within 72h of the fix being confirmed. Never mention internal incident numbers."""),
@@ -207,6 +221,68 @@ def seed_if_empty(db: Session) -> None:
                      Decision(text="Go-live checklist approval stays with the acting manager; Meera only for escalations")]
     wf.apply_handover(db, ho2)
     stamp(_at(hd, 17))
+
+    # ---- Network OSS team: a second engineering team so the org chart is not Billing-only ----
+    n1d = today - timedelta(days=6)
+    oss = [(n, "absent" if n == "Aditya" else "attended") for n in ("Farhan", "Neha", "Aditya", "Ishaan", "Pooja")]
+    n1 = meeting("Network OSS Weekly - Alarm noise", n1d, "held", oss,
+                 "1. Alarm flood after controller firmware 7.2\n2. Inventory sync lag\n3. On-call cover",
+                 summary="Alarm volume from cell-site controllers doubled after firmware 7.2 and most of it is duplicates. "
+                         "The team agreed to deduplicate at ingestion and set a 15-minute p95 SLO for inventory sync. "
+                         "Ishaan is away Nov 4-8, so Neha covers SRE on-call.", series="Network OSS Weekly")
+    decide(n1, "Deduplicate alarms at ingestion, not in the NOC dashboard",
+           "Inventory sync lag SLO is 15 minutes (p95)", "Neha covers SRE on-call while Ishaan is away")
+    o1 = item(n1, "Add alarm dedup rule for controller firmware 7.2", "Ishaan", -1)
+    wf.update_item(db, o1, {"status": "in_progress"})
+    o2 = item(n1, "Build inventory sync lag dashboard with p95 alert", "Aditya", 3)
+    o3 = item(n1, "Write regression tests for alarm correlation rules", "Pooja", 5)
+    o4 = item(n1, "Tune PagerDuty escalation policy for NOC alarms", "Ishaan", 2)
+    o5 = item(n1, "Fix inventory API timeout under bulk sync", "Neha", 4)
+    wf.update_item(db, o5, {"status": "blocked"}, note="Waiting for vendor API rate-limit increase")
+    stamp(_at(n1d))
+
+    # ---- Handover: Ishaan -> Neha (on-call cover). SRE work moving to a backend engineer. ----
+    ho3 = Meeting(title="Handover: Ishaan -> Neha (SRE on-call, Nov 4-8)", kind="handover", status="held",
+                  scheduled_at=_at(hd, 12), series=None, handover_from=p["Ishaan"], handover_to=p["Neha"],
+                  agenda="On-call duties, open alarm work, PagerDuty access.",
+                  summary="Ishaan walked Neha through the on-call rota and the firmware 7.2 alarm flood. The dedup rule is "
+                          "half done and must ship before the next 5% firmware wave. Neha has PagerDuty admin access now.",
+                  recap_source="manual")
+    db.add(ho3)
+    db.flush()
+    ho3.participants = [Participant(person_id=p["Ishaan"].id, attendance="attended"),
+                        Participant(person_id=p["Neha"].id, attendance="attended"),
+                        Participant(person_id=p["Farhan"].id, attendance="absent")]
+    ho3.decisions = [Decision(text="No firmware 7.2 rollout beyond 5% of sites until the dedup rule is live")]
+    wf.apply_handover(db, ho3)
+    stamp(_at(hd, 12))
+
+    # ---- Product & Design: portal design review (Arjun missed it) ----
+    d1d = today - timedelta(days=2)
+    dr = meeting("Customer portal design review", d1d, "held",
+                 [("Sneha", "attended"), ("Kavya", "attended"), ("Rohan", "attended"), ("Zoya", "attended"),
+                  ("Priya", "attended"), ("Arjun", "absent")],
+                 "1. Invoice preview screen\n2. Support questions from INC-142\n3. Proration examples for finance",
+                 summary="Kavya presented the invoice preview designs; empty and error states are still missing. Zoya shared "
+                         "that most INC-142 support tickets asked 'why two invoices?', so the preview must show proration "
+                         "lines clearly. Rohan will document worked proration examples for the finance sign-off.",
+                 series="Portal Design Review")
+    decide(dr, "Invoice preview shows one adjustment line per plan change, labelled 'Plan change credit'",
+           "Support gets a macro for invoice preview questions before go-live")
+    q1 = item(dr, "Finalise invoice preview empty and error states", "Kavya", 2)
+    q2 = item(dr, "Document worked proration examples for finance review", "Rohan", 0)
+    q3 = item(dr, "Prepare support macro for invoice preview questions", "Zoya", 6)
+    stamp(_at(d1d))
+    for it, title in [(o1, "Network Alarm Runbook"), (o4, "Network Alarm Runbook"),
+                      (q2, "Billing API v2 Specification"), (q3, "Customer Communication Guidelines")]:
+        db.add(ItemKBLink(item_id=it.id, doc_id=docs[title].id, reason="Seeded reference", confidence=0.9, source="manual"))
+    for it in (o1, o2, o3, o4, o5):
+        it.created_at = _at(n1d)
+    for it in (q1, q2, q3):
+        it.created_at = _at(d1d)
+    for m in (n1, dr):
+        db.add(KBDoc(title=f"Recap: {m.title}", doc_type="meeting_recap", meeting_id=m.id,
+                     content=m.summary + "\n\nDecisions:\n" + "\n".join(f"- {x.text}" for x in m.decisions)))
 
     # ---- Week 4 (upcoming) ----
     w4d = today + timedelta(days=4)

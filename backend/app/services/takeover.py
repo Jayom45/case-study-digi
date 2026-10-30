@@ -335,3 +335,15 @@ def inbox_entries(db: Session, person: Person) -> list[dict]:
                 "done": ready == 100 or (reason == "missed" and has_brief)})
     return entries
 
+
+
+def handed_over_by(db: Session, person: Person) -> list[dict]:
+    """Handovers this person GAVE, with how ready the receiver is: the leaver can confirm the takeover landed."""
+    out = []
+    for m in db.scalars(select(Meeting).where(Meeting.kind == "handover", Meeting.handover_from_id == person.id)
+                        .order_by(Meeting.scheduled_at.desc())).all():
+        pack = latest_pack(db, m.id, m.handover_to_id)
+        out.append({"meeting": m, "to_person": m.handover_to,
+                    "open_items": sum(1 for l in m.item_links if l.item.is_open),
+                    "pack_id": pack.id if pack else None, "readiness": readiness(pack) if pack else 0})
+    return out

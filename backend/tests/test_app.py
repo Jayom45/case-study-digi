@@ -168,6 +168,7 @@ def ananya_to_rahul(client):
 def test_org_tree_and_badges(client):
     roots = client.get("/api/org").json()["roots"]
     assert [r["name"] for r in roots] == ["Meera Kapoor"]
+    assert sorted(len(m["reports"]) for m in roots[0]["reports"]) == [3, 4, 5]  # three teams
     ananya = next(r for r in roots[0]["reports"] if r["name"] == "Ananya Rao")
     rahul = next(r for r in ananya["reports"] if r["name"] == "Rahul Mehta")
     assert rahul["badges"]["handovers"] >= 1  # Ananya -> Rahul handover waiting
@@ -179,6 +180,9 @@ def test_inbox_lists_handovers_and_missed_meetings(client):
     box = client.get(f"/api/people/{rahul['id']}/inbox").json()
     assert any(h["from_person"]["name"] == "Ananya Rao" and h["open_items"] >= 3 for h in box["handovers"])
     assert any(m["meeting"]["title"] == "Billing Sync - Week 3" for m in box["missed"])
+    assert box["my_items"]
+    priya = client.get(f"/api/people/{person(client, 'Priya')['id']}/inbox").json()
+    assert [g["to_person"]["name"] for g in priya["handed_over"]] == ["Arjun Desai"]
     assert client.get("/api/people/99999/inbox").status_code == 404
 
 

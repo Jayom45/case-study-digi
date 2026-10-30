@@ -2,7 +2,7 @@
 // never from AI output, so they can't break if the model returns something odd.
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { fmtDate, fmtDateTime } from "../format";
+import { fmtDate } from "../format";
 import { SourceTag } from "./ui";
 
 const EVENT_COLORS = {
@@ -19,34 +19,47 @@ const EVENT_LABELS = {
   closed: "Closed", reopened: "Reopened", updated: "Updated", kb_linked: "KB linked", nudge_drafted: "Nudge",
 };
 
-/** "Where they left off": vertical timeline of the latest item events. */
+/** "Where they left off": the latest item events, grouped by day. */
 export function Timeline({ events }) {
   const [showAll, setShowAll] = useState(false);
-  const shown = showAll ? events : events.slice(-8);
+  const shown = showAll ? events : events.slice(-10);
   if (!events.length) return <p className="text-sm text-slate-400">No history yet.</p>;
+  const days = [];
+  for (const e of shown) {
+    const day = fmtDate(e.at);
+    if (!days.length || days[days.length - 1].day !== day) days.push({ day, events: [] });
+    days[days.length - 1].events.push(e);
+  }
   return (
     <div>
       {events.length > shown.length && (
-        <button onClick={() => setShowAll(true)} className="mb-3 text-xs font-medium text-indigo-600 hover:underline">
+        <button onClick={() => setShowAll(true)} className="mb-4 text-xs font-medium text-indigo-600 hover:underline">
           Show all {events.length} events
         </button>
       )}
-      <ol className="relative space-y-4 border-l border-slate-200 pl-6">
-        {shown.map((e, i) => (
-          <li key={i} className="relative">
-            <span className={`absolute -left-[29px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${EVENT_COLORS[e.event_type] || "bg-slate-300"}`} />
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-              <span>{fmtDateTime(e.at)}</span>
-              <span className="font-medium text-slate-500">{EVENT_LABELS[e.event_type] || e.event_type}</span>
-              <SourceTag itemId={e.item_id} />
-            </div>
-            <p className="mt-0.5 text-sm text-slate-700">
-              <span className="font-medium">{e.item_title}</span>
-              <span className="text-slate-500"> — {e.message}</span>
-            </p>
-          </li>
+      <div className="space-y-5">
+        {days.map((d) => (
+          <div key={d.day}>
+            <p className="mb-2 text-xs font-semibold text-slate-400">{d.day}</p>
+            <ol className="relative space-y-3 border-l-2 border-slate-100 pl-5">
+              {d.events.map((e, i) => (
+                <li key={i} className="relative">
+                  <span className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${EVENT_COLORS[e.event_type] || "bg-slate-300"}`} />
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-semibold text-slate-600">{EVENT_LABELS[e.event_type] || e.event_type}</span>
+                    <SourceTag itemId={e.item_id} />
+                    <span className="text-slate-400">{new Date(e.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                  <p className="mt-0.5 text-sm text-slate-700">
+                    <span className="font-medium">{e.item_title}</span>
+                    <span className="text-slate-500"> — {e.message}</span>
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </div>
         ))}
-      </ol>
+      </div>
     </div>
   );
 }
@@ -60,7 +73,15 @@ const STAGES = [
 
 /** "State of work": items grouped by stage, left to right. */
 export function Workflow({ stages }) {
+  const total = STAGES.reduce((n, s) => n + stages[s.key].length, 0) || 1;
   return (
+    <div>
+      <div className="mb-4 flex h-2.5 overflow-hidden rounded-full bg-slate-100">
+        {STAGES.map((s) => (
+          <div key={s.key} className={`${s.bar} transition-all`} style={{ width: `${(100 * stages[s.key].length) / total}%` }}
+            title={`${s.label}: ${stages[s.key].length}`} />
+        ))}
+      </div>
     <div className="grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
       {STAGES.map((s, i) => (
         <div key={s.key} className="contents">
@@ -88,6 +109,7 @@ export function Workflow({ stages }) {
           {i < STAGES.length - 1 && <ChevronRight className="hidden h-5 w-5 self-center text-slate-300 md:block" />}
         </div>
       ))}
+    </div>
     </div>
   );
 }

@@ -10,7 +10,7 @@ body {
 
 /* Org chart connectors: classic nested-list tree, lines drawn with pseudo-elements. */
 .tree ul { @apply relative flex justify-center pt-6; }
-.tree li { @apply relative flex flex-col items-center px-2 pt-6; }
+.tree li { @apply relative flex flex-col items-center px-5 pt-6; }
 .tree li::before, .tree li::after {
   content: ""; @apply absolute top-0 h-6 w-1/2 border-t border-slate-300;
 }
